@@ -17,7 +17,7 @@ class AIScheduler:
         genai.configure(api_key=google_gemini_api_key)
         
         # Load Gemini model
-        self.model = genai.GenerativeModel("gemini-1.5-flash")
+        self.model = genai.GenerativeModel("gemini-2.0-flash")
 
     def generate_tasks(self, user_input):
         try:
