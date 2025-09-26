@@ -79,7 +79,7 @@ def ai_chat(user_id):
         ---
         """
         
-        model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=system_prompt)
+        model = genai.GenerativeModel('gemini-2.0-flash', system_instruction=system_prompt)
         chat = model.start_chat(history=history)
         response = chat.send_message(user_message)
         ai_response_text = response.text
