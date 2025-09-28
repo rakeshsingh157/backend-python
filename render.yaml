@@ -4,21 +4,35 @@ services:
     env: python
     region: oregon
     plan: free
-    rootDir: python_special_files/Backend
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --workers=2 --threads=8 --timeout=300
     autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      # AI API Keys - Set these in Render dashboard
       - key: GOOGLE_GEMINI_API_KEY
         sync: false
+      - key: COHERE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      # Database Configuration - Set these in Render dashboard
       - key: DB_HOST
-        value: database-1.chcyc88wcx2l.eu-north-1.rds.amazonaws.com
+        sync: false
       - key: DB_USER
-        value: admin
+        sync: false
       - key: DB_PASSWORD
         sync: false
       - key: DB_DATABASE
-        value: eventsreminder
+        sync: false
+      # Flask Configuration
+      - key: FLASK_SECRET_KEY
+        sync: false
+      - key: FLASK_ENV
+        value: production
+      - key: DEBUG
+        value: "False"
+      - key: USE_PURE
+        value: "True"
 
