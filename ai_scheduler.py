@@ -65,88 +65,226 @@ class AIScheduler:
     
     def generate_tasks(self, prompt):
         """
-        Generate tasks from a natural language prompt
+        Generate tasks from a natural language prompt with intelligent reminder settings
         """
         try:
             # Use IST timezone
             ist_tz = pytz.timezone('Asia/Kolkata')
             today = datetime.now(ist_tz).strftime('%A, %Y-%m-%d')
+            current_time = datetime.now(ist_tz).strftime('%H:%M')
             
             task_prompt = f"""
-            Today is {today}.
+            You are an intelligent task scheduler. Today is {today} and current time is {current_time} IST.
             
-            Based on this prompt: "{prompt}"
+            Based on this user prompt: "{prompt}"
             
-            Generate a list of calendar events/tasks in JSON format. Each task should have:
-            - title: Brief task title
-            - description: Detailed description
-            - date: Date in YYYY-MM-DD format
-            - time: Time in HH:MM format (24-hour)
-            - category: Category like "work", "personal", "health", etc.
+            Generate a comprehensive list of calendar events/tasks in JSON format. Each task MUST have ALL these fields:
+            - title: Clear, concise task title
+            - description: Detailed, actionable description with context
+            - date: Date in YYYY-MM-DD format (use {today} if not specified)
+            - time: Time in HH:MM format (24-hour, use appropriate default times)
+            - category: Choose from: work, personal, health, fitness, education, shopping, social, travel, maintenance, finance
+            - reminder_setting: Intelligent reminder based on task importance and type
             
-            Return only a JSON array of tasks, no other text.
+            REMINDER SETTING RULES (AI should decide intelligently):
+            - Important meetings/appointments: "1 hour" or "2 hours"
+            - Medical appointments: "2 hours" (need time to prepare/travel)
+            - Work tasks/deadlines: "1 day" or "4 hours" 
+            - Gym/fitness: "30 minutes" (time to prepare/change)
+            - Social events: "1 hour" or "30 minutes"
+            - Travel/flights: "4 hours" or "1 day" (critical timing)
+            - Education/learning: "30 minutes" (prepare materials)
+            - Shopping/errands: "1 hour" (plan route/list)
+            - Personal tasks: "15 minutes" or "30 minutes"
+            - Maintenance/repairs: "2 hours" (arrange time/materials)
+            
+            TIME DEFAULTS if not specified:
+            - Morning activities: 09:00
+            - Work meetings: 10:00, 14:00
+            - Lunch: 12:30
+            - Gym/fitness: 07:00 or 18:00
+            - Dinner: 19:30
+            - Medical appointments: 10:00 or 15:00
+            - Social events: 19:00
+            
+            EXAMPLE OUTPUT:
+            [
+                {{
+                    "title": "Team Meeting",
+                    "description": "Weekly team standup to discuss project progress and upcoming deadlines",
+                    "date": "{today}",
+                    "time": "10:00",
+                    "category": "work",
+                    "reminder_setting": "1 hour"
+                }},
+                {{
+                    "title": "Gym Session",
+                    "description": "Full body workout including cardio and strength training",
+                    "date": "{today}",
+                    "time": "18:00", 
+                    "category": "fitness",
+                    "reminder_setting": "30 minutes"
+                }}
+            ]
+            
+            CRITICAL: Return ONLY the JSON array, no additional text or formatting.
             """
             
-            # Try Gemini first (Google's flagship model)
+            # Try Groq first (fastest and most reliable)
+            if self.groq_client:
+                try:
+                    chat_completion = self.groq_client.chat.completions.create(
+                        messages=[{"role": "user", "content": task_prompt}],
+                        model="llama-3.1-8b-instant",
+                        temperature=0.4,
+                        max_tokens=1000
+                    )
+                    response_text = chat_completion.choices[0].message.content.strip()
+                    
+                    # Try to parse JSON
+                    try:
+                        tasks = json.loads(response_text)
+                        # Enhance tasks with fallback reminder settings if missing
+                        enhanced_tasks = self._ensure_reminder_settings(tasks)
+                        return {"success": True, "tasks": enhanced_tasks}
+                    except json.JSONDecodeError:
+                        print("Groq returned non-JSON response, trying next service...")
+                except Exception as e:
+                    print(f"Groq failed: {e}")
+            
+            # Fallback to Gemini if Groq fails
             if self.api_key and genai:
                 try:
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     response = model.generate_content(task_prompt)
                     response_text = response.text.strip()
                     
+                    # Clean up response
+                    if response_text.startswith('```json'):
+                        response_text = response_text.replace('```json', '').replace('```', '').strip()
+                    elif response_text.startswith('```'):
+                        response_text = response_text.replace('```', '').strip()
+                    
                     # Try to parse JSON
                     try:
                         tasks = json.loads(response_text)
-                        return {"success": True, "tasks": tasks}
+                        # Enhance tasks with fallback reminder settings if missing
+                        enhanced_tasks = self._ensure_reminder_settings(tasks)
+                        return {"success": True, "tasks": enhanced_tasks}
                     except json.JSONDecodeError:
                         print("Gemini returned non-JSON response, trying next service...")
                 except Exception as e:
                     print(f"Gemini failed: {e}")
             
-            # Fallback to Cohere
+            # Final fallback to Cohere
             if self.cohere_api_key and self.co:
                 try:
                     response = self.co.chat(
                         message=task_prompt,
                         max_tokens=1000,
-                        temperature=0.7
+                        temperature=0.4
                     )
                     response_text = response.text.strip()
                     
-                    # Try to parse JSON
-                    try:
-                        tasks = json.loads(response_text)
-                        return {"success": True, "tasks": tasks}
-                    except json.JSONDecodeError:
-                        print("Cohere returned non-JSON response, trying next service...")
-                except Exception as e:
-                    print(f"Cohere failed: {e}")
-            
-            # Final fallback to Groq
-            if self.groq_client:
-                try:
-                    response = self.groq_client.chat.completions.create(
-                        model="llama-3.1-8b-instant",
-                        messages=[{"role": "user", "content": task_prompt}],
-                        max_tokens=1000,
-                        temperature=0.7
-                    )
-                    
-                    response_text = response.choices[0].message.content.strip()
+                    # Clean up response
+                    if response_text.startswith('```json'):
+                        response_text = response_text.replace('```json', '').replace('```', '').strip()
                     
                     # Try to parse JSON
                     try:
                         tasks = json.loads(response_text)
-                        return {"success": True, "tasks": tasks}
+                        # Enhance tasks with fallback reminder settings if missing
+                        enhanced_tasks = self._ensure_reminder_settings(tasks)
+                        return {"success": True, "tasks": enhanced_tasks}
                     except json.JSONDecodeError:
                         return {"success": False, "message": "Failed to parse AI response"}
                 except Exception as e:
-                    print(f"Groq failed: {e}")
+                    print(f"Cohere failed: {e}")
             
             return {"success": False, "message": "All AI services unavailable"}
             
         except Exception as e:
             return {"success": False, "message": f"Error generating tasks: {str(e)}"}
+    
+    def _ensure_reminder_settings(self, tasks):
+        """
+        Ensure all tasks have appropriate reminder settings based on their category and type
+        """
+        enhanced_tasks = []
+        
+        for task in tasks:
+            # Make sure task has all required fields
+            if not isinstance(task, dict):
+                continue
+                
+            # Add missing fields with defaults
+            task.setdefault('title', 'Untitled Task')
+            task.setdefault('description', 'No description provided')
+            task.setdefault('category', 'personal')
+            task.setdefault('date', datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%Y-%m-%d'))
+            task.setdefault('time', '09:00')
+            
+            # Intelligently set reminder_setting if missing
+            if 'reminder_setting' not in task or not task.get('reminder_setting'):
+                task['reminder_setting'] = self._get_smart_reminder(task['title'], task['description'], task['category'])
+            
+            enhanced_tasks.append(task)
+        
+        return enhanced_tasks
+    
+    def _get_smart_reminder(self, title, description, category):
+        """
+        Intelligently determine appropriate reminder setting based on task details
+        """
+        title_lower = title.lower()
+        description_lower = description.lower()
+        category_lower = category.lower()
+        
+        # Critical/Important events - longer reminders
+        critical_keywords = ['flight', 'interview', 'exam', 'surgery', 'wedding', 'deadline', 'presentation']
+        if any(keyword in title_lower or keyword in description_lower for keyword in critical_keywords):
+            return "1 day"
+        
+        # Medical/Health appointments
+        if category_lower == 'health' or any(word in title_lower for word in ['doctor', 'dentist', 'hospital', 'clinic', 'appointment']):
+            return "2 hours"
+        
+        # Work-related tasks
+        if category_lower == 'work' or any(word in title_lower for word in ['meeting', 'conference', 'call', 'standup']):
+            if 'important' in description_lower or 'urgent' in description_lower:
+                return "2 hours"
+            return "1 hour"
+        
+        # Travel related
+        if category_lower == 'travel' or any(word in title_lower for word in ['flight', 'train', 'bus', 'trip', 'travel']):
+            return "4 hours"
+        
+        # Fitness/Gym
+        if category_lower == 'fitness' or any(word in title_lower for word in ['gym', 'workout', 'exercise', 'run', 'yoga']):
+            return "30 minutes"
+        
+        # Education/Learning
+        if category_lower == 'education' or any(word in title_lower for word in ['class', 'course', 'study', 'learn', 'training']):
+            return "30 minutes"
+        
+        # Social events
+        if category_lower == 'social' or any(word in title_lower for word in ['party', 'dinner', 'lunch', 'hangout', 'date']):
+            return "1 hour"
+        
+        # Shopping/Errands
+        if category_lower == 'shopping' or any(word in title_lower for word in ['shop', 'buy', 'grocery', 'market']):
+            return "1 hour"
+        
+        # Maintenance/Repairs
+        if category_lower == 'maintenance' or any(word in title_lower for word in ['repair', 'fix', 'service', 'maintenance']):
+            return "2 hours"
+        
+        # Finance related
+        if category_lower == 'finance' or any(word in title_lower for word in ['bank', 'payment', 'tax', 'budget']):
+            return "1 hour"
+        
+        # Default for personal and everything else
+        return "15 minutes"
 
 ai_scheduler_bp = Blueprint('ai_scheduler', __name__)
 
@@ -1578,20 +1716,56 @@ def ai_enhance_task_data(title, description, category):
     """
     try:
         enhancement_prompt = f"""
-        Enhance this task data to make it more useful and organized:
+        You are a professional productivity assistant. Enhance this task data to make it extremely useful, actionable, and well-organized:
         
         Title: "{title}"
         Description: "{description}"
         Category: "{category}"
         
-        Please:
-        1. Improve the description to be more detailed and actionable (keep it concise but informative)
-        2. Validate/improve the category (common categories: work, personal, health, fitness, education, shopping, social, travel, maintenance, finance)
+        TASK: Create an enhanced version that is:
+        1. MORE DETAILED: Add specific, actionable details that make the task clearer
+        2. MORE PROFESSIONAL: Use clear, concise, professional language
+        3. MORE HELPFUL: Include context, tips, or important reminders when relevant
+        4. MORE STRUCTURED: Organize information logically
+        
+        ENHANCEMENT RULES:
+        - For gym/fitness: Include workout type, duration, body parts, or specific exercises
+        - For meetings: Include purpose, attendees, agenda items, or preparation needed
+        - For appointments: Include location, what to bring, preparation required
+        - For work tasks: Include deliverables, deadlines, priority level, or next steps
+        - For personal tasks: Include specific steps, materials needed, or time estimates
+        - For health tasks: Include preparation, what to expect, or follow-up needed
+        - For shopping: Include specific items, budget, store locations, or alternatives
+        - For travel: Include booking details, documents needed, or itinerary items
+        
+        CATEGORY VALIDATION:
+        Choose the MOST APPROPRIATE category from these options:
+        - "work" - Professional tasks, meetings, projects, deadlines
+        - "personal" - General personal activities, self-care, hobbies
+        - "health" - Medical appointments, wellness, mental health
+        - "fitness" - Exercise, gym, sports, physical activities
+        - "education" - Learning, courses, training, skill development
+        - "shopping" - Purchasing items, errands, market visits
+        - "social" - Friends, family time, parties, social events
+        - "travel" - Trips, bookings, itinerary planning
+        - "maintenance" - Home repair, vehicle service, equipment care
+        - "finance" - Banking, investments, bill payments, budgeting
+        
+        EXAMPLES OF GOOD ENHANCEMENTS:
+        
+        Input: "Gym Session" / "Go to gym" / "fitness"
+        Output: "Complete 60-minute full-body workout including 20 minutes cardio warm-up, strength training focusing on major muscle groups (chest, back, legs), and 10 minutes cool-down stretching. Bring water bottle, towel, and workout playlist."
+        
+        Input: "Doctor Appointment" / "See doctor" / "health"  
+        Output: "Annual health checkup with Dr. Smith including blood work review, vital signs check, and discussion of any health concerns. Arrive 15 minutes early, bring insurance card, current medications list, and prepared questions about health goals."
+        
+        Input: "Team Meeting" / "Meeting with team" / "work"
+        Output: "Weekly team standup meeting to review project progress, discuss blockers, and align on upcoming sprint goals. Review previous week's deliverables, prepare status updates, and come with questions or concerns to address with the team."
         
         Return ONLY a JSON object with this exact format:
         {{
-            "enhanced_description": "improved description here",
-            "enhanced_category": "validated category here"
+            "enhanced_description": "detailed, actionable, and professional description here",
+            "enhanced_category": "most_appropriate_category_here"
         }}
         """
         
@@ -1603,12 +1777,17 @@ def ai_enhance_task_data(title, description, category):
                 chat_completion = groq_client.chat.completions.create(
                     messages=[{"role": "user", "content": enhancement_prompt}],
                     model="llama-3.1-8b-instant",
-                    temperature=0.3,
-                    max_tokens=300
+                    temperature=0.4,  # Slightly higher for more creativity
+                    max_tokens=500    # More tokens for detailed descriptions
                 )
                 response_text = chat_completion.choices[0].message.content.strip()
+                
+                # Clean up response (remove markdown formatting if present)
+                if response_text.startswith('```json'):
+                    response_text = response_text.replace('```json', '').replace('```', '').strip()
+                
                 enhanced_data = json.loads(response_text)
-                print("✓ Used Groq API for task enhancement")
+                print("✓ Used Groq API for enhanced task description")
             except Exception as e:
                 print(f"Groq enhancement failed: {e}")
         
@@ -1622,9 +1801,11 @@ def ai_enhance_task_data(title, description, category):
                 # Clean up response (remove markdown formatting if present)
                 if response_text.startswith('```json'):
                     response_text = response_text.replace('```json', '').replace('```', '').strip()
+                elif response_text.startswith('```'):
+                    response_text = response_text.replace('```', '').strip()
                 
                 enhanced_data = json.loads(response_text)
-                print("✓ Used Gemini API for task enhancement")
+                print("✓ Used Gemini API for enhanced task description")
             except Exception as e:
                 print(f"Gemini enhancement failed: {e}")
         
@@ -1633,24 +1814,164 @@ def ai_enhance_task_data(title, description, category):
             try:
                 response = co.chat(
                     message=enhancement_prompt,
-                    max_tokens=300,
-                    temperature=0.3
+                    max_tokens=500,
+                    temperature=0.4
                 )
                 response_text = response.text.strip()
+                
+                # Clean up response
+                if response_text.startswith('```json'):
+                    response_text = response_text.replace('```json', '').replace('```', '').strip()
+                
                 enhanced_data = json.loads(response_text)
-                print("✓ Used Cohere API for task enhancement")
+                print("✓ Used Cohere API for enhanced task description")
             except Exception as e:
                 print(f"Cohere enhancement failed: {e}")
         
+        # Validate the enhanced data
         if enhanced_data and 'enhanced_description' in enhanced_data and 'enhanced_category' in enhanced_data:
+            # Ensure description is significantly better than original
+            original_length = len(description.split())
+            enhanced_length = len(enhanced_data['enhanced_description'].split())
+            
+            # If enhancement is much better, use it
+            if enhanced_length >= original_length and len(enhanced_data['enhanced_description']) > len(description):
+                return {
+                    "success": True,
+                    "enhanced_description": enhanced_data['enhanced_description'],
+                    "enhanced_category": enhanced_data['enhanced_category'],
+                    "improvement_ratio": enhanced_length / max(original_length, 1)
+                }
+            else:
+                # Fallback to basic enhancement if AI didn't improve much
+                fallback_description = create_fallback_enhancement(title, description, category)
+                return {
+                    "success": True,
+                    "enhanced_description": fallback_description,
+                    "enhanced_category": validate_category(category),
+                    "fallback_used": True
+                }
+        else:
+            # Use fallback enhancement if AI completely failed
+            fallback_description = create_fallback_enhancement(title, description, category)
             return {
                 "success": True,
-                "enhanced_description": enhanced_data['enhanced_description'],
-                "enhanced_category": enhanced_data['enhanced_category']
+                "enhanced_description": fallback_description,
+                "enhanced_category": validate_category(category),
+                "fallback_used": True
             }
-        else:
-            return {"success": False, "message": "AI enhancement failed"}
             
     except Exception as e:
         print(f"AI enhancement error: {e}")
-        return {"success": False, "message": f"AI enhancement error: {str(e)}"}
+        # Always provide some enhancement, even if AI fails
+        fallback_description = create_fallback_enhancement(title, description, category)
+        return {
+            "success": True,
+            "enhanced_description": fallback_description,
+            "enhanced_category": validate_category(category),
+            "error": str(e),
+            "fallback_used": True
+        }
+
+
+def create_fallback_enhancement(title, description, category):
+    """
+    Create a basic enhancement when AI fails
+    """
+    enhanced = description
+    
+    # Add title context if description doesn't include it
+    if title.lower() not in description.lower():
+        enhanced = f"{title}: {description}"
+    
+    # Add category-specific enhancements
+    category_lower = category.lower()
+    
+    if category_lower in ['gym', 'fitness', 'workout']:
+        if 'workout' not in enhanced.lower() and 'exercise' not in enhanced.lower():
+            enhanced = f"{enhanced}. Remember to bring water bottle and towel for the workout session."
+    
+    elif category_lower in ['meeting', 'work']:
+        if 'meeting' in title.lower() or 'meeting' in enhanced.lower():
+            enhanced = f"{enhanced}. Prepare agenda items and review relevant materials beforehand."
+    
+    elif category_lower in ['doctor', 'health', 'appointment']:
+        if 'appointment' in enhanced.lower():
+            enhanced = f"{enhanced}. Bring insurance card and list of current medications."
+    
+    elif category_lower in ['shopping', 'grocery']:
+        enhanced = f"{enhanced}. Make a list of needed items and check for any available discounts."
+    
+    elif category_lower in ['travel', 'trip']:
+        enhanced = f"{enhanced}. Verify all necessary documents and bookings are ready."
+    
+    # Add time estimate if not present
+    if 'minute' not in enhanced and 'hour' not in enhanced:
+        if category_lower in ['gym', 'fitness']:
+            enhanced = f"{enhanced} (Estimated duration: 1 hour)"
+        elif category_lower in ['meeting']:
+            enhanced = f"{enhanced} (Estimated duration: 30-60 minutes)"
+        elif category_lower in ['appointment']:
+            enhanced = f"{enhanced} (Plan for 30 minutes plus travel time)"
+    
+    return enhanced
+
+
+def validate_category(category):
+    """
+    Validate and potentially correct the category
+    """
+    valid_categories = {
+        'work', 'personal', 'health', 'fitness', 'education', 
+        'shopping', 'social', 'travel', 'maintenance', 'finance'
+    }
+    
+    category_lower = category.lower()
+    
+    # Direct matches
+    if category_lower in valid_categories:
+        return category_lower
+    
+    # Category mappings
+    category_mappings = {
+        'gym': 'fitness',
+        'workout': 'fitness',
+        'exercise': 'fitness',
+        'doctor': 'health',
+        'medical': 'health',
+        'appointment': 'health',
+        'meeting': 'work',
+        'business': 'work',
+        'office': 'work',
+        'project': 'work',
+        'grocery': 'shopping',
+        'market': 'shopping',
+        'buy': 'shopping',
+        'purchase': 'shopping',
+        'friend': 'social',
+        'family': 'social',
+        'party': 'social',
+        'vacation': 'travel',
+        'trip': 'travel',
+        'flight': 'travel',
+        'hotel': 'travel',
+        'repair': 'maintenance',
+        'fix': 'maintenance',
+        'service': 'maintenance',
+        'bank': 'finance',
+        'money': 'finance',
+        'bill': 'finance',
+        'payment': 'finance',
+        'learn': 'education',
+        'study': 'education',
+        'course': 'education',
+        'training': 'education'
+    }
+    
+    # Check if category matches any mapping
+    for key, value in category_mappings.items():
+        if key in category_lower:
+            return value
+    
+    # Default to personal if no match found
+    return 'personal'
