@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 import os
+import sys
 import traceback
 import mysql.connector
 from mysql.connector import Error
@@ -43,59 +44,114 @@ app.register_blueprint(schedule_bp)
 # --- Database and Uploads Configuration ---
 @app.route("/")
 def home():
-    """Serves the main login/signup page."""
-    return render_template("index.html")
+    """API status endpoint."""
+    return jsonify({
+        "message": "HelpScout API is running",
+        "status": "active",
+        "version": "1.0.0",
+        "endpoints": {
+            "auth": "/api/login, /api/register",
+            "tasks": "/api/tasks/*",
+            "schedule": "/api/schedule/*",
+            "ai": "/api/ai/*",
+            "user": "/api/user/*"
+        }
+    })
+
+@app.route("/health")
+def health_check():
+    """Health check endpoint."""
+    return jsonify({
+        "status": "healthy",
+        "timestamp": os.getenv('BUILD_TIMESTAMP', 'unknown'),
+        "python_version": os.getenv('PYTHON_VERSION', 'unknown')
+    })
 
 @app.route("/home")
 def home_redirect():
-    """Redirect /home to login page since user_id is required."""
+    """Redirect to main status endpoint."""
     return redirect(url_for('home'))
-
 
 @app.route("/profile/<user_id>")
 def profile_page(user_id):
-    """Serves the user profile page."""
-    return render_template("profile.html", user_id=user_id)
-
+    """User profile API endpoint."""
+    return jsonify({
+        "message": "Profile endpoint",
+        "user_id": user_id,
+        "note": "Use /api/user/profile/<user_id> for profile data"
+    })
 
 @app.route("/home/<user_id>")
 def home_page(user_id):
-    return render_template("home.html", user_id=user_id)
+    """User home API endpoint."""
+    return jsonify({
+        "message": "User home endpoint",
+        "user_id": user_id,
+        "note": "Use /api/tasks/<user_id> for user tasks"
+    })
 
 @app.route("/schedule/<user_id>")
 def schedule_page(user_id):
-    return render_template("schedule.html", user_id=user_id)
+    """User schedule API endpoint."""
+    return jsonify({
+        "message": "Schedule endpoint",
+        "user_id": user_id,
+        "note": "Use /api/schedule/<user_id> for schedule data"
+    })
 
 @app.route("/add_event/<user_id>")
 def add_event_page(user_id):
-    return render_template("add-new-task.html", user_id=user_id)
+    """Add event API endpoint."""
+    return jsonify({
+        "message": "Add event endpoint",
+        "user_id": user_id,
+        "note": "Use POST /api/tasks/<user_id>/add for adding events"
+    })
 
 @app.route("/AI/<user_id>")
 def ai_page(user_id):
-    return render_template("AI.html", user_id=user_id)
+    """AI endpoint."""
+    return jsonify({
+        "message": "AI endpoint",
+        "user_id": user_id,
+        "note": "Use /api/ai/chat for AI interactions"
+    })
     
 @app.route("/aiAssistant/<user_id>")
 def ai_assistant_page(user_id):
-    return render_template("AiAssistant.html", user_id=user_id)
+    """AI Assistant endpoint."""
+    return jsonify({
+        "message": "AI Assistant endpoint",
+        "user_id": user_id,
+        "note": "Use /api/ai/scheduler/chat for AI assistant"
+    })
     
 @app.route("/collaboration/<user_id>")
 def collaboration_page(user_id):
-    return render_template("collabration.html", user_id=user_id)
+    """Collaboration endpoint."""
+    return jsonify({
+        "message": "Collaboration endpoint",
+        "user_id": user_id,
+        "note": "Use /api/collaboration/* for collaboration features"
+    })
 
 # Return JSON errors for API routes, with optional stack traces
 @app.errorhandler(Exception)
 def handle_exception(e):
-    try:
-        is_api = request.path.startswith('/api/')
-    except Exception:
-        is_api = False
-    if is_api:
-        payload = {"error": str(e)}
-        if os.getenv('DEBUG_ERRORS') == '1':
-            payload["trace"] = traceback.format_exc()
-        return jsonify(payload), 500
-    # Non-API: fall back to default behavior
-    return render_template("index.html"), 500
+    """Handle all exceptions with JSON responses."""
+    payload = {"error": str(e), "type": type(e).__name__}
+    
+    # Add stack trace in debug mode
+    if os.getenv('DEBUG_ERRORS') == '1' or app.debug:
+        import traceback
+        payload["trace"] = traceback.format_exc()
+    
+    # Return appropriate status code
+    status_code = 500
+    if hasattr(e, 'code'):
+        status_code = e.code
+    
+    return jsonify(payload), status_code
 
 # --- Main entry point ---
 if __name__ == "__main__":
@@ -106,5 +162,16 @@ if __name__ == "__main__":
         print(f"⚠️ Database initialization failed: {e}")
         print("🚀 Starting server anyway for API testing...")
     
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
+else:
+    # Running via gunicorn
+    print("🚀 Starting HelpScout API via gunicorn")
+    print(f"Python version: {sys.version}")
+    try:
+        init_db()
+        print("✅ Database initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Database initialization failed: {e}")
+        print("🚀 Continuing anyway...")
 
