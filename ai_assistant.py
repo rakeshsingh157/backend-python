@@ -122,6 +122,7 @@ def detect_and_create_events(user_message, user_id):
             # Fallback to Cohere
             if co and not event_detection_result:
                 response = co.chat(
+                    model="command-r-03-2025",
                     message=detection_prompt,
                     max_tokens=20,
                     temperature=0.1
@@ -261,6 +262,7 @@ def detect_and_create_events(user_message, user_id):
                 # Fallback to Cohere for extraction
                 if co:
                     response = co.chat(
+                        model="command-r-03-2025",
                         message=extraction_prompt,
                         max_tokens=500,
                         temperature=0.1
@@ -438,6 +440,7 @@ def handle_event_deletion(user_message, user_id):
             # Fallback to Cohere
             if co and not deletion_analysis:
                 response = co.chat(
+                    model="command-r-03-2025",
                     message=deletion_prompt,
                     max_tokens=500,
                     temperature=0.1
@@ -1304,12 +1307,13 @@ def ai_chat_automatic():
                 cohere_prompt += f"User: {user_message}\nAssistant:"
                 
                 response = co.chat(
+                    model="command-r-03-2025",
                     message=cohere_prompt,
                     max_tokens=1000,
                     temperature=0.3
                 )
                 ai_response_text = response.text.strip()
-                print("✓ Used Cohere API as fallback for chat response")
+                print("✓ Used Cohere API (command-r-03-2025) as fallback for chat response")
             except Exception as e:
                 print(f"Cohere API failed: {e}")
         
@@ -1348,6 +1352,7 @@ def ai_chat_automatic():
                 full_prompt = f"{system_prompt}\n\nUser: {user_message}\n\nAssistant:"
                 
                 response = co.chat(
+                    model="command-r-03-2025",
                     message=full_prompt,
                     max_tokens=1000,
                     temperature=0.3

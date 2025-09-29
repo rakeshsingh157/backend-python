@@ -106,23 +106,25 @@ def get_personal_tasks(user_id):
     
     try:
         cursor = conn.cursor(dictionary=True)
-        # UPDATED QUERY: Use LEFT JOIN to get assigner's email for assigned tasks
+        # UPDATED QUERY: Show only tasks assigned by others (not self-created)
         query = """
             SELECT
                 e.*,
-                assigner.email as assigner_email
+                assigner.email as assigner_email,
+                assigner.username as assigner_name
             FROM
                 events e
-            LEFT JOIN
+            INNER JOIN
                 assigned_tasks at ON e.id = at.event_id
-            LEFT JOIN
+            INNER JOIN
                 users assigner ON at.assigner_id = assigner.user_id
             WHERE
-                e.user_id = %s
+                at.assignee_id = %s
+                AND at.assigner_id != %s
             ORDER BY
                 e.date, e.time
         """
-        cursor.execute(query, (user_id,))
+        cursor.execute(query, (user_id, user_id))
         tasks = cursor.fetchall()
         return jsonify(tasks), 200
     except Error as e:
