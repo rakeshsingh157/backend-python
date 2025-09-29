@@ -4,6 +4,31 @@ services:
     env: python
     region: oregon
     plan: free
+    buildCommand: |-
+      echo "===================="
+      echo "Python Version Check"
+      echo "===================="
+      python --version
+      python3 --version || echo "python3 not available"
+      which python
+      echo "===================="
+      echo "Environment Variables"
+      echo "===================="
+      env | grep PYTHON
+      echo "===================="
+      echo "Installing requirements..."
+      echo "===================="
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers=2 --threads=8 --timeout=300
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.10.14"ype: web
+    name: python-special-backend
+    env: python
+    region: oregon
+    plan: free
     buildCommand: |
       echo "Requested Python version: 3.10.1"
       python --version

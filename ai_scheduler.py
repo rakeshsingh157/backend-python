@@ -1,7 +1,6 @@
 import os
 import re
 import json
-import cohere
 from flask import Blueprint, request, jsonify, session
 from dotenv import load_dotenv
 
@@ -11,6 +10,12 @@ try:
 except ImportError:
     genai = None
     print("Warning: google.generativeai not available")
+
+try:
+    import cohere
+except ImportError:
+    cohere = None
+    print("Warning: cohere not available")
 
 from database import get_db_connection # Make sure you can import your DB connection
 from mysql.connector import Error
@@ -41,12 +46,14 @@ class AIScheduler:
         self.co = None
         self.groq_client = None
         
-        if self.cohere_api_key:
+        if self.cohere_api_key and cohere:
             try:
                 self.co = cohere.Client(self.cohere_api_key)
             except Exception as e:
                 print(f"Warning: Failed to initialize Cohere client in AIScheduler: {e}")
                 self.co = None
+        else:
+            self.co = None
             
         if self.groq_api_key and Groq:
             try:
@@ -155,12 +162,14 @@ else:
 co = None
 groq_client = None
 
-if cohere_api_key:
+if cohere_api_key and cohere:
     try:
         co = cohere.Client(cohere_api_key)
     except Exception as e:
         print(f"Warning: Failed to initialize Cohere client: {e}")
         co = None
+else:
+    co = None
     
 if groq_api_key and Groq:
     try:
