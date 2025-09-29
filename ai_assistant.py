@@ -100,14 +100,18 @@ def detect_and_create_events(user_message, user_id):
     event_detection_result = None
     
     try:
-        # Try Gemini first (Google's flagship model)
-        if api_key and genai:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(detection_prompt)
-            event_detection_result = response.text.strip()
-            print(f"Gemini detection result: {event_detection_result}")
-    except Exception as gemini_error:
-        print(f"Gemini detection failed: {gemini_error}")
+        # Try Groq first (fastest and most reliable)
+        if groq_client:
+            response = groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": detection_prompt}],
+                max_tokens=20,
+                temperature=0.1
+            )
+            event_detection_result = response.choices[0].message.content.strip()
+            print(f"Groq detection result: {event_detection_result}")
+    except Exception as groq_error:
+        print(f"Groq detection failed: {groq_error}")
         
         try:
             # Fallback to Cohere
@@ -123,18 +127,14 @@ def detect_and_create_events(user_message, user_id):
             print(f"Cohere detection failed: {cohere_error}")
             
             try:
-                # Final fallback to Groq
-                if groq_client and not event_detection_result:
-                    response = groq_client.chat.completions.create(
-                        model="llama-3.1-8b-instant",
-                        messages=[{"role": "user", "content": detection_prompt}],
-                        max_tokens=20,
-                        temperature=0.1
-                    )
-                    event_detection_result = response.choices[0].message.content.strip()
-                    print(f"Groq detection result: {event_detection_result}")
-            except Exception as groq_error:
-                print(f"All AI detection failed: {groq_error}")
+                # Final fallback to Gemini (if working)
+                if api_key and genai and not event_detection_result:
+                    model = genai.GenerativeModel('gemini-pro')
+                    response = model.generate_content(detection_prompt)
+                    event_detection_result = response.text.strip()
+                    print(f"Gemini detection result: {event_detection_result}")
+            except Exception as gemini_error:
+                print(f"All AI detection failed: {gemini_error}")
                 return False, "AI detection services unavailable"
     
     # If no events detected, check for deletion requests
@@ -393,14 +393,18 @@ def handle_event_deletion(user_message, user_id):
     deletion_analysis = None
     
     try:
-        # Try Gemini first (Google's flagship model)
-        if api_key and genai:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(deletion_prompt)
-            deletion_analysis = response.text.strip()
-            print(f"Gemini deletion analysis: {deletion_analysis}")
-    except Exception as gemini_error:
-        print(f"Gemini deletion analysis failed: {gemini_error}")
+        # Try Groq first (fastest and most reliable)
+        if groq_client:
+            response = groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": deletion_prompt}],
+                max_tokens=500,
+                temperature=0.1
+            )
+            deletion_analysis = response.choices[0].message.content.strip()
+            print(f"Groq deletion analysis: {deletion_analysis}")
+    except Exception as groq_error:
+        print(f"Groq deletion analysis failed: {groq_error}")
         
         try:
             # Fallback to Cohere
@@ -416,18 +420,14 @@ def handle_event_deletion(user_message, user_id):
             print(f"Cohere deletion analysis failed: {cohere_error}")
             
             try:
-                # Final fallback to Groq
-                if groq_client and not deletion_analysis:
-                    response = groq_client.chat.completions.create(
-                        model="llama-3.1-8b-instant",
-                        messages=[{"role": "user", "content": deletion_prompt}],
-                        max_tokens=500,
-                        temperature=0.1
-                    )
-                    deletion_analysis = response.choices[0].message.content.strip()
-                    print(f"Groq deletion analysis: {deletion_analysis}")
-            except Exception as groq_error:
-                print(f"All AI deletion analysis failed: {groq_error}")
+                # Final fallback to Gemini (if working)
+                if api_key and genai and not deletion_analysis:
+                    model = genai.GenerativeModel('gemini-pro')
+                    response = model.generate_content(deletion_prompt)
+                    deletion_analysis = response.text.strip()
+                    print(f"Gemini deletion analysis: {deletion_analysis}")
+            except Exception as gemini_error:
+                print(f"All AI deletion analysis failed: {gemini_error}")
                 return False, "AI deletion analysis services unavailable"
     
     # Parse deletion analysis
