@@ -42,10 +42,18 @@ class AIScheduler:
         self.groq_client = None
         
         if self.cohere_api_key:
-            self.co = cohere.Client(self.cohere_api_key)
+            try:
+                self.co = cohere.Client(self.cohere_api_key)
+            except Exception as e:
+                print(f"Warning: Failed to initialize Cohere client in AIScheduler: {e}")
+                self.co = None
             
         if self.groq_api_key and Groq:
-            self.groq_client = Groq(api_key=self.groq_api_key)
+            try:
+                self.groq_client = Groq(api_key=self.groq_api_key)
+            except Exception as e:
+                print(f"Warning: Failed to initialize Groq client in AIScheduler: {e}")
+                self.groq_client = None
     
     def generate_tasks(self, prompt):
         """

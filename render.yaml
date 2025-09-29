@@ -4,12 +4,16 @@ services:
     env: python
     region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      echo "Requested Python version: 3.10.1"
+      python --version
+      pip install --upgrade pip
+      pip install -r requirements.txt
     startCommand: gunicorn app:app --workers=2 --threads=8 --timeout=300
     autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.1
+        value: 3.10.11
       # AI API Keys - Set these in Render dashboard
       - key: GOOGLE_GEMINI_API_KEY
         sync: false
