@@ -112,13 +112,12 @@ def detect_and_create_events(user_message, user_id):
         try:
             # Fallback to Cohere
             if co and not event_detection_result:
-                response = co.generate(
-                    model='command-r-plus',
-                    prompt=detection_prompt,
+                response = co.chat(
+                    message=detection_prompt,
                     max_tokens=20,
                     temperature=0.1
                 )
-                event_detection_result = response.generations[0].text.strip()
+                event_detection_result = response.text.strip()
                 print(f"Cohere detection result: {event_detection_result}")
         except Exception as cohere_error:
             print(f"Cohere detection failed: {cohere_error}")
@@ -242,13 +241,12 @@ def detect_and_create_events(user_message, user_id):
             try:
                 # Fallback to Cohere for extraction
                 if co:
-                    response = co.generate(
-                        model='command-r-plus',
-                        prompt=extraction_prompt,
+                    response = co.chat(
+                        message=extraction_prompt,
                         max_tokens=500,
                         temperature=0.1
                     )
-                    events_json = response.generations[0].text.strip()
+                    events_json = response.text.strip()
                     print(f"Cohere extraction result: {events_json}")
             except Exception as cohere_error:
                 print(f"Cohere extraction failed: {cohere_error}")
@@ -407,13 +405,12 @@ def handle_event_deletion(user_message, user_id):
         try:
             # Fallback to Cohere
             if co and not deletion_analysis:
-                response = co.generate(
-                    model='command-r-plus',
-                    prompt=deletion_prompt,
+                response = co.chat(
+                    message=deletion_prompt,
                     max_tokens=500,
                     temperature=0.1
                 )
-                deletion_analysis = response.generations[0].text.strip()
+                deletion_analysis = response.text.strip()
                 print(f"Cohere deletion analysis: {deletion_analysis}")
         except Exception as cohere_error:
             print(f"Cohere deletion analysis failed: {cohere_error}")
@@ -1229,13 +1226,12 @@ def ai_chat_automatic():
                         cohere_prompt += f"Assistant: {msg['parts'][0]['text']}\n"
                 cohere_prompt += f"User: {user_message}\nAssistant:"
                 
-                response = co.generate(
-                    model='command-r-plus',
-                    prompt=cohere_prompt,
+                response = co.chat(
+                    message=cohere_prompt,
                     max_tokens=1000,
                     temperature=0.3
                 )
-                ai_response_text = response.generations[0].text.strip()
+                ai_response_text = response.text.strip()
                 print("✓ Used Cohere API as fallback for chat response")
             except Exception as e:
                 print(f"Cohere API failed: {e}")
@@ -1271,13 +1267,15 @@ def ai_chat_automatic():
                     elif msg['role'] == 'model':
                         cohere_messages.append({"role": "assistant", "content": msg['parts'][0]['text']})
                 
-                response = co.generate(
-                    model='command-r-plus',
-                    prompt=f"{system_prompt}\n\nUser: {user_message}\n\nAssistant:",
+                # Prepare a simple prompt for Cohere
+                full_prompt = f"{system_prompt}\n\nUser: {user_message}\n\nAssistant:"
+                
+                response = co.chat(
+                    message=full_prompt,
                     max_tokens=1000,
                     temperature=0.3
                 )
-                ai_response_text = response.generations[0].text.strip()
+                ai_response_text = response.text.strip()
                 print("✓ Used Cohere API as final fallback for chat response")
             except Exception as e:
                 print(f"Cohere API failed: {e}")
