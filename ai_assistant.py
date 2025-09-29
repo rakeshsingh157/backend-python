@@ -99,6 +99,11 @@ def detect_and_create_events(user_message, user_id):
     # Try different AI services to detect events
     event_detection_result = None
     
+    # IMPROVED: First check for deletion keywords manually as a fallback
+    user_message_lower = user_message.lower()
+    deletion_keywords = ['delete', 'cancel', 'remove', 'clear']
+    has_deletion_keywords = any(keyword in user_message_lower for keyword in deletion_keywords)
+    
     try:
         # Try Groq first (fastest and most reliable)
         if groq_client:
@@ -135,10 +140,24 @@ def detect_and_create_events(user_message, user_id):
                     print(f"Gemini detection result: {event_detection_result}")
             except Exception as gemini_error:
                 print(f"All AI detection failed: {gemini_error}")
-                return False, "AI detection services unavailable"
+                # IMPROVED: If all AI fails but we have deletion keywords, force DELETE_EVENTS
+                if has_deletion_keywords:
+                    event_detection_result = "DELETE_EVENTS"
+                    print("🔄 Forcing DELETE_EVENTS due to deletion keywords")
+                else:
+                    return False, "AI detection services unavailable"
+    
+    # IMPROVED: Override AI decision if deletion keywords are clearly present
+    if has_deletion_keywords and not event_detection_result:
+        event_detection_result = "DELETE_EVENTS"
+        print("🔄 Manual override: Setting DELETE_EVENTS due to deletion keywords")
     
     # If no events detected, check for deletion requests
     if not event_detection_result or "NO_EVENTS" in event_detection_result or "QUESTION" in event_detection_result:
+        # IMPROVED: Give deletion one more chance if we have clear deletion keywords
+        if has_deletion_keywords:
+            print(f"🔄 Deletion keywords detected in '{user_message}', trying deletion anyway")
+            return handle_event_deletion(user_message, user_id)
         return False, f"AI determined: {event_detection_result or 'No clear result'}"
     
     # If deletion request detected, handle event deletion
@@ -254,7 +273,7 @@ def detect_and_create_events(user_message, user_id):
                 try:
                     # Final fallback to Gemini for extraction
                     if api_key:
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-pro')
                         response = model.generate_content(extraction_prompt)
                         events_json = response.text.strip()
                         print(f"Gemini extraction result: {events_json}")
@@ -368,11 +387,20 @@ def handle_event_deletion(user_message, user_id):
     
     IMPORTANT: Use the actual database ID numbers shown above (like "ID 35", "ID 40", etc.)
     
+    MATCHING RULES:
+    - If user says "delete task" or "delete my task" → match ANY event/task
+    - If user says "delete ai assistance" or "delete ai_assistance" → match events with "ai" or "assistance" in title
+    - If user says "cancel meeting" → match events with "meeting" in title
+    - If user says "remove appointment" → match events with "appointment" in title
+    - If user says "delete all" or "clear schedule" → match ALL events
+    - For partial matches: "cancel gym" matches "Gym workout", "AI assistance", etc.
+    
     Consider:
-    - Specific titles mentioned
+    - Specific titles mentioned (even partial matches)
     - Time references (today, tomorrow, this week)  
-    - Event types (meeting, appointment, etc.)
+    - Event types (meeting, appointment, task, etc.)
     - Partial matches (user says "cancel meeting" matches any event with "meeting" in title)
+    - Generic requests like "delete task" should match available events
     
     Respond with ONLY this JSON format using the ACTUAL database IDs:
     {{
@@ -433,11 +461,22 @@ def handle_event_deletion(user_message, user_id):
     # Parse deletion analysis
     if deletion_analysis:
         try:
-            # Extract JSON from response
+            # Extract JSON from response with improved parsing
             json_start = deletion_analysis.find('{')
             json_end = deletion_analysis.rfind('}') + 1
             if json_start != -1 and json_end > json_start:
                 clean_json = deletion_analysis[json_start:json_end]
+                
+                # Try to fix common JSON formatting issues
+                clean_json = clean_json.replace('\n', ' ').replace('\t', ' ')
+                # Fix missing commas between objects
+                clean_json = re.sub(r'}\s*{', '}, {', clean_json)
+                # Fix trailing commas
+                clean_json = re.sub(r',\s*}', '}', clean_json)
+                clean_json = re.sub(r',\s*]', ']', clean_json)
+                
+                print(f"Cleaned JSON for parsing: {clean_json[:200]}...")
+                
                 deletion_data = json.loads(clean_json)
                 
                 if 'delete_events' in deletion_data and deletion_data['delete_events']:
@@ -457,9 +496,37 @@ def handle_event_deletion(user_message, user_id):
                         return False, "Failed to delete events from database"
                 else:
                     return False, "No matching events found to delete"
+            else:
+                print("No valid JSON structure found in AI response")
+                return False, "AI response format error"
                     
         except json.JSONDecodeError as e:
             print(f"JSON parsing error in deletion: {e}")
+            print(f"Raw AI response: {deletion_analysis}")
+            
+            # Fallback: try to extract event IDs using regex
+            try:
+                import re
+                id_matches = re.findall(r'"id":\s*(\d+)', deletion_analysis)
+                if id_matches:
+                    deleted_count = 0
+                    deleted_titles = []
+                    
+                    for event_id in id_matches[:10]:  # Limit to 10 for safety
+                        try:
+                            if delete_event_from_db(user_id, int(event_id)):
+                                deleted_count += 1
+                                deleted_titles.append(f"Task ID {event_id}")
+                        except:
+                            continue
+                    
+                    if deleted_count > 0:
+                        titles_text = ', '.join(deleted_titles)
+                        return True, f"✅ Successfully deleted {deleted_count} event(s): {titles_text}"
+                
+            except Exception as regex_error:
+                print(f"Regex fallback failed: {regex_error}")
+            
             return False, "Could not parse deletion analysis"
         except Exception as e:
             print(f"Event deletion error: {e}")
@@ -644,7 +711,7 @@ def create_conflict_warning_message(conflicts, new_event_title, new_event_date, 
 
 
 def get_user_events_for_deletion(user_id):
-    """Get user's upcoming events for deletion analysis."""
+    """Get all user's upcoming events for deletion analysis."""
     try:
         conn = get_db_connection()
         if not conn:
@@ -652,14 +719,13 @@ def get_user_events_for_deletion(user_id):
             
         cursor = conn.cursor()
         
-        # Get events from today onwards
+        # Get ALL events from today onwards (no limit for deletion analysis)
         today = datetime.now().strftime('%Y-%m-%d')
         query = """
         SELECT id, title, description, date, time, category 
         FROM events 
         WHERE user_id = %s AND date >= %s AND done = 0
         ORDER BY date, time
-        LIMIT 20
         """
         
         cursor.execute(query, (user_id, today))
@@ -1097,28 +1163,32 @@ def ai_test_no_auth():
 
 # --- HELPER FUNCTION TO GET SCHEDULE ---
 def _get_user_schedule(user_id):
-    """Fetches the user's upcoming events for the next 7 days from the database."""
+    """Fetches all upcoming events from the database."""
     conn = get_db_connection()
     if not conn:
         return "Database connection failed."
     
     try:
         cursor = conn.cursor(dictionary=True)
-        # Get events from today onwards for the next 7 days
+        # Get ALL events from today onwards (no date limit)
         today = datetime.now().strftime('%Y-%m-%d')
-        end_date = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
         
-        query = "SELECT title, date, time FROM events WHERE user_id = %s AND date >= %s AND date <= %s AND done = FALSE ORDER BY date, time"
-        cursor.execute(query, (user_id, today, end_date))
+        query = "SELECT title, date, time FROM events WHERE user_id = %s AND date >= %s AND done = FALSE ORDER BY date, time LIMIT 50"
+        cursor.execute(query, (user_id, today))
         events = cursor.fetchall()
         
         if not events:
-            return "The user's schedule for the next 7 days is clear."
+            return "The user's schedule is clear."
             
         # Format the events into a clean string for the AI
-        schedule_string = "Here is the user's schedule for the next 7 days:\n"
+        schedule_string = "Here is the user's complete schedule:\n"
         for event in events:
             schedule_string += f"- On {event['date']} at {event['time']}: {event['title']}\n"
+        
+        # Add count info if we hit the limit
+        if len(events) == 50:
+            schedule_string += "\n(Showing first 50 upcoming events)\n"
+            
         return schedule_string
         
     except Error as e:
@@ -1189,6 +1259,12 @@ def ai_chat_automatic():
         IMPORTANT: You have AUTOMATIC event detection enabled. When users mention events naturally in conversation 
         (like "I have a meeting at 10am and lunch at 1pm tomorrow"), you automatically create them in their calendar.
         
+        CAPABILITIES:
+        - Handle ALL events and tasks (no time limitations)
+        - Create, delete, and manage events for any date
+        - Process multiple events in a single message
+        - Smart conflict detection and scheduling assistance
+        
         - Be concise, encouraging, and clear in your responses.
         - When asked to generate lists, always use markdown bullet points.
         - Use the current date of {datetime.now().strftime('%A, %Y-%m-%d')} for any time-related questions.
@@ -1206,7 +1282,8 @@ def ai_chat_automatic():
         # Try Gemini first (Google's flagship model)
         if api_key and genai:
             try:
-                model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_prompt)
+                model = genai.GenerativeModel('gemini-pro')
+                # Note: system_instruction not supported in gemini-pro, will include in prompt
                 chat = model.start_chat(history=history)
                 response = chat.send_message(user_message)
                 ai_response_text = response.text

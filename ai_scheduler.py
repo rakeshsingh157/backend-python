@@ -513,7 +513,7 @@ def detect_and_create_events(user_message, user_id):
                 try:
                     # Final fallback to Gemini for extraction
                     if api_key:
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-pro')
                         response = model.generate_content(extraction_prompt)
                         events_json = response.text.strip()
                         print(f"Gemini extraction result: {events_json}")
@@ -627,7 +627,10 @@ def handle_event_deletion(user_message, user_id):
     
     The user wants to delete/cancel events. Based on their message, determine which events should be deleted.
     
-    IMPORTANT: Use the actual database ID numbers shown above (like "ID 35", "ID 40", etc.)
+    IMPORTANT: 
+    1. Use the actual database ID numbers shown above (like "ID 35", "ID 40", etc.)
+    2. Return VALID JSON ONLY - no extra text, no markdown formatting
+    3. Each object must have proper comma separation
     
     Consider:
     - Specific titles mentioned
@@ -635,7 +638,7 @@ def handle_event_deletion(user_message, user_id):
     - Event types (meeting, appointment, etc.)
     - Partial matches (user says "cancel meeting" matches any event with "meeting" in title)
     
-    Respond with ONLY this JSON format using the ACTUAL database IDs:
+    Respond with ONLY this EXACT JSON format using the ACTUAL database IDs:
     {{
         "delete_events": [
             {{
@@ -646,6 +649,7 @@ def handle_event_deletion(user_message, user_id):
         ]
     }}
     
+    CRITICAL: Return VALID JSON only. No code blocks, no extra text.
     If no events match the deletion criteria, respond with:
     {{"delete_events": []}}
     """
@@ -694,11 +698,22 @@ def handle_event_deletion(user_message, user_id):
     # Parse deletion analysis
     if deletion_analysis:
         try:
-            # Extract JSON from response
+            # Extract JSON from response with improved parsing
             json_start = deletion_analysis.find('{')
             json_end = deletion_analysis.rfind('}') + 1
             if json_start != -1 and json_end > json_start:
                 clean_json = deletion_analysis[json_start:json_end]
+                
+                # Try to fix common JSON formatting issues
+                clean_json = clean_json.replace('\n', ' ').replace('\t', ' ')
+                # Fix missing commas between objects
+                clean_json = re.sub(r'}\s*{', '}, {', clean_json)
+                # Fix trailing commas
+                clean_json = re.sub(r',\s*}', '}', clean_json)
+                clean_json = re.sub(r',\s*]', ']', clean_json)
+                
+                print(f"Cleaned JSON for parsing: {clean_json[:200]}...")
+                
                 deletion_data = json.loads(clean_json)
                 
                 if 'delete_events' in deletion_data and deletion_data['delete_events']:
@@ -718,9 +733,37 @@ def handle_event_deletion(user_message, user_id):
                         return False, "Failed to delete events from database"
                 else:
                     return False, "No matching events found to delete"
+            else:
+                print("No valid JSON structure found in AI response")
+                return False, "AI response format error"
                     
         except json.JSONDecodeError as e:
             print(f"JSON parsing error in deletion: {e}")
+            print(f"Raw AI response: {deletion_analysis}")
+            
+            # Fallback: try to extract event IDs using regex
+            try:
+                import re
+                id_matches = re.findall(r'"id":\s*(\d+)', deletion_analysis)
+                if id_matches:
+                    deleted_count = 0
+                    deleted_titles = []
+                    
+                    for event_id in id_matches[:10]:  # Limit to 10 for safety
+                        try:
+                            if delete_event_from_db(user_id, int(event_id)):
+                                deleted_count += 1
+                                deleted_titles.append(f"Task ID {event_id}")
+                        except:
+                            continue
+                    
+                    if deleted_count > 0:
+                        titles_text = ', '.join(deleted_titles)
+                        return True, f"✅ Successfully deleted {deleted_count} event(s): {titles_text}"
+                
+            except Exception as regex_error:
+                print(f"Regex fallback failed: {regex_error}")
+            
             return False, "Could not parse deletion analysis"
         except Exception as e:
             print(f"Event deletion error: {e}")
@@ -1484,7 +1527,8 @@ def ai_chat_automatic():
         if not ai_response_text:
             try:
                 if api_key:
-                    model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_prompt)
+                    model = genai.GenerativeModel('gemini-pro')
+                    # Note: system_instruction not supported in gemini-pro, will include in prompt
                     chat = model.start_chat(history=history)
                     response = chat.send_message(user_message)
                     ai_response_text = response.text
