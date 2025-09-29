@@ -148,10 +148,18 @@ co = None
 groq_client = None
 
 if cohere_api_key:
-    co = cohere.Client(cohere_api_key)
+    try:
+        co = cohere.Client(cohere_api_key)
+    except Exception as e:
+        print(f"Warning: Failed to initialize Cohere client: {e}")
+        co = None
     
 if groq_api_key and Groq:
-    groq_client = Groq(api_key=groq_api_key)
+    try:
+        groq_client = Groq(api_key=groq_api_key)
+    except Exception as e:
+        print(f"Warning: Failed to initialize Groq client: {e}")
+        groq_client = None
 
 # --- SMART AI EVENT DETECTION AND CREATION ---
 def detect_and_create_events(user_message, user_id):

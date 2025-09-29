@@ -9,7 +9,7 @@ services:
     autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.9
+        value: 3.10.1
       # AI API Keys - Set these in Render dashboard
       - key: GOOGLE_GEMINI_API_KEY
         sync: false
