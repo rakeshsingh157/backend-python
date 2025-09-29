@@ -20,6 +20,7 @@ except ImportError:
 from database import get_db_connection # Make sure you can import your DB connection
 from mysql.connector import Error
 from datetime import datetime, timedelta
+import pytz
 
 try:
     from groq import Groq
@@ -67,7 +68,9 @@ class AIScheduler:
         Generate tasks from a natural language prompt
         """
         try:
-            today = datetime.now().strftime('%A, %Y-%m-%d')
+            # Use IST timezone
+            ist_tz = pytz.timezone('Asia/Kolkata')
+            today = datetime.now(ist_tz).strftime('%A, %Y-%m-%d')
             
             task_prompt = f"""
             Today is {today}.
@@ -185,7 +188,9 @@ def detect_and_create_events(user_message, user_id):
     """
     
     # First, use AI to determine if this message contains events
-    today = datetime.now().strftime('%A, %Y-%m-%d')
+    # Use IST timezone
+    ist_tz = pytz.timezone('Asia/Kolkata')
+    today = datetime.now(ist_tz).strftime('%A, %Y-%m-%d')
     
     detection_prompt = f"""
     You are an AI assistant that determines if a user message contains calendar events or event operations.
@@ -263,7 +268,7 @@ def detect_and_create_events(user_message, user_id):
         You are an AI assistant that extracts event details from user messages.
         
         Today is {today}.
-        Current time: {datetime.now().strftime('%H:%M')}
+        Current time: {datetime.now(ist_tz).strftime('%H:%M')} IST
         
         User message: "{user_message}"
         
@@ -285,7 +290,7 @@ def detect_and_create_events(user_message, user_id):
         - For school/learning events, use "09:00" as default
         
         DATE INTERPRETATION EXAMPLES:
-        - Current date: {datetime.now().strftime('%Y-%m-%d')} (September 29, 2025)
+        - Current date: {datetime.now(ist_tz).strftime('%Y-%m-%d')} (IST)
         this is only example
         - "on 1" → "2025-10-01" (October 1st)
         - "on 2" → "2025-10-02" (October 2nd)  
@@ -293,8 +298,8 @@ def detect_and_create_events(user_message, user_id):
         - "on 7" → "2025-10-07" (October 7th)
         - "on 15" → "2025-10-15" (October 15th)
         - "on 25" → "2025-10-25" (October 25th)
-        - "tomorrow" → {(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')}
-        - "today" → {datetime.now().strftime('%Y-%m-%d')}
+        - "tomorrow" → {(datetime.now(ist_tz) + timedelta(days=1)).strftime('%Y-%m-%d')}
+        - "today" → {datetime.now(ist_tz).strftime('%Y-%m-%d')}
         
         CRITICAL RULE: Match the EXACT day number from user input!
         
@@ -453,7 +458,9 @@ def handle_event_deletion(user_message, user_id):
     """
     Handles event deletion requests using AI to identify which events to delete.
     """
-    today = datetime.now().strftime('%A, %Y-%m-%d')
+    # Use IST timezone
+    ist_tz = pytz.timezone('Asia/Kolkata')
+    today = datetime.now(ist_tz).strftime('%A, %Y-%m-%d')
     
     # First, get user's current events to help with deletion
     current_events = get_user_events_for_deletion(user_id)
@@ -470,7 +477,7 @@ def handle_event_deletion(user_message, user_id):
     You are an AI assistant that identifies which events to delete based on user requests.
     
     Today is {today}.
-    Current time: {datetime.now().strftime('%H:%M')}
+    Current time: {datetime.now(ist_tz).strftime('%H:%M')} IST
     
     User message: "{user_message}"
     
@@ -587,8 +594,11 @@ def fix_date_interpretation(user_message, ai_date):
     """
     import re
     from datetime import datetime, timedelta
+    import pytz
     
-    current_date = datetime.now()
+    # Use IST timezone
+    ist_tz = pytz.timezone('Asia/Kolkata')
+    current_date = datetime.now(ist_tz)
     today = current_date.strftime('%Y-%m-%d')
     current_day = current_date.day
     current_month = current_date.month
@@ -764,8 +774,9 @@ def get_user_events_for_deletion(user_id):
             
         cursor = conn.cursor()
         
-        # Get events from today onwards
-        today = datetime.now().strftime('%Y-%m-%d')
+        # Get events from today onwards (using IST)
+        ist_tz = pytz.timezone('Asia/Kolkata')
+        today = datetime.now(ist_tz).strftime('%Y-%m-%d')
         query = """
         SELECT id, title, description, date, time, category 
         FROM events 
@@ -853,9 +864,11 @@ def create_event_in_db(user_id, event_data):
         
         event_data['time'] = event_time  # Update the event data
         
-        # Calculate reminder_datetime based on reminder_setting
+        # Calculate reminder_datetime based on reminder_setting using IST
+        ist_tz = pytz.timezone('Asia/Kolkata')
         event_datetime_str = f"{event_data['date']} {event_time}"
-        event_datetime = datetime.strptime(event_datetime_str, '%Y-%m-%d %H:%M')
+        naive_event_datetime = datetime.strptime(event_datetime_str, '%Y-%m-%d %H:%M')
+        event_datetime = ist_tz.localize(naive_event_datetime)
         
         # Parse reminder setting and calculate reminder_datetime
         reminder_setting = event_data.get('reminder_setting', '15 minutes')
@@ -890,7 +903,7 @@ def create_event_in_db(user_id, event_data):
             event_data['time'],
             0,  # done = False (0)
             reminder_setting,
-            reminder_datetime
+            reminder_datetime.strftime('%Y-%m-%d %H:%M:%S') if reminder_datetime else None
         )
         
         cursor.execute(query, values)
@@ -899,7 +912,7 @@ def create_event_in_db(user_id, event_data):
         cursor.close()
         conn.close()
         
-        print(f"✅ Event created: {event_data['title']} on {event_data['date']} at {event_data['time']}")
+        print(f"✅ Event created (IST): {event_data['title']} on {event_data['date']} at {event_data['time']}")
         print(f"   Category: {event_data.get('category', 'personal')}")
         print(f"   Reminder: {reminder_setting} -> {reminder_datetime}")
         
@@ -1007,8 +1020,9 @@ def extract_events_with_patterns(user_message):
     # Normalize the message
     message_lower = user_message.lower()
     
-    # Date extraction and parsing
-    today = datetime.now()
+    # Date extraction and parsing (using IST)
+    ist_tz = pytz.timezone('Asia/Kolkata')
+    today = datetime.now(ist_tz)
     date_map = {
         'today': today.strftime('%Y-%m-%d'),
         'tomorrow': (today + timedelta(days=1)).strftime('%Y-%m-%d'),
@@ -1379,3 +1393,264 @@ def ai_chat_automatic():
     except Exception as e:
         print(f"An error occurred in ai_chat_automatic: {e}")
         return jsonify({"error": "An error occurred while processing your message."}), 500
+
+
+@ai_scheduler_bp.route("/api/<user_id>/ai/add-task", methods=['POST'])
+def ai_add_task(user_id):
+    """
+    AI-powered task creation endpoint that intelligently processes and enhances task data
+    before saving it to the database. Auto-generates reminder datetime based on reminder_setting.
+    """
+    try:
+        # Check if request has JSON data
+        if not request.is_json:
+            return jsonify({"error": "Request must be JSON"}), 400
+            
+        data = request.json
+        
+        # Check if JSON data is empty
+        if not data:
+            return jsonify({"error": "Request body cannot be empty"}), 400
+        
+        # Validate required fields with detailed messages
+        required_fields = ['title', 'description', 'category', 'date', 'time', 'reminder_setting']
+        missing_fields = []
+        
+        for field in required_fields:
+            if field not in data or not data.get(field):
+                missing_fields.append(field)
+        
+        if missing_fields:
+            return jsonify({
+                "error": "Missing required fields",
+                "missing_fields": missing_fields,
+                "required_fields": required_fields,
+                "message": f"Please provide: {', '.join(missing_fields)}"
+            }), 400
+        
+        # Extract task data
+        title = data.get('title')
+        description = data.get('description') 
+        category = data.get('category')
+        date = data.get('date')
+        time = data.get('time')
+        reminder_setting = data.get('reminder_setting')
+        done = data.get('done', False)
+        
+        # Validate date and time format and localize to IST
+        try:
+            ist_tz = pytz.timezone('Asia/Kolkata')
+            naive_task_datetime = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+            task_datetime = ist_tz.localize(naive_task_datetime)
+        except ValueError:
+            return jsonify({"error": "Invalid date or time format. Use YYYY-MM-DD for date and HH:MM for time (IST)"}), 400
+        
+        # AI Enhancement: Use AI to enhance task description and category if needed
+        enhanced_data = ai_enhance_task_data(title, description, category)
+        
+        if enhanced_data.get('success'):
+            description = enhanced_data.get('enhanced_description', description)
+            category = enhanced_data.get('enhanced_category', category)
+        
+        # Calculate reminder datetime based on reminder_setting
+        reminder_datetime = calculate_reminder_datetime(date, time, reminder_setting)
+        
+        if not reminder_datetime:
+            return jsonify({"error": "Invalid reminder_setting format. Use format like '15 minutes', '1 hour', '2 days'"}), 400
+        
+        # Save to database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        cursor = conn.cursor()
+        
+        query = """
+            INSERT INTO events 
+            (user_id, title, description, category, date, time, done, 
+             reminder_setting, reminder_datetime, reminde1, reminde2, reminde3, reminde4)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        
+        values = (
+            user_id, title, description, category, date, time, done,
+            reminder_setting, reminder_datetime, False, False, False, False
+        )
+        
+        cursor.execute(query, values)
+        conn.commit()
+        task_id = cursor.lastrowid
+        
+        # Return success response with generated reminder datetime
+        return jsonify({
+            "success": True,
+            "message": "AI task added successfully!",
+            "task_id": task_id,
+            "task_data": {
+                "user_id": user_id,
+                "title": title,
+                "description": description,
+                "category": category,
+                "date": date,
+                "time": time,
+                "done": done,
+                "reminder_setting": reminder_setting,
+                "reminder_datetime": reminder_datetime
+            },
+            "ai_enhanced": enhanced_data.get('success', False)
+        }), 201
+        
+    except Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+    finally:
+        if 'conn' in locals() and conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+
+def calculate_reminder_datetime(date, time, reminder_setting):
+    """
+    Calculate reminder datetime based on task datetime and reminder setting.
+    Uses Indian Standard Time (IST) for all calculations.
+    
+    Args:
+        date (str): Task date in YYYY-MM-DD format
+        time (str): Task time in HH:MM format
+        reminder_setting (str): Reminder setting like "15 minutes", "1 hour", "2 days"
+    
+    Returns:
+        str: Formatted reminder datetime string in IST or None if invalid
+    """
+    try:
+        # Parse task datetime and localize to IST
+        ist_tz = pytz.timezone('Asia/Kolkata')
+        naive_task_datetime = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+        task_datetime = ist_tz.localize(naive_task_datetime)
+        
+        # Parse reminder setting
+        parts = reminder_setting.lower().split()
+        if len(parts) != 2:
+            return None
+            
+        value_str, unit = parts
+        try:
+            value = int(value_str)
+        except ValueError:
+            return None
+        
+        # Calculate time delta
+        delta = timedelta()
+        if "minute" in unit:
+            delta = timedelta(minutes=value)
+        elif "hour" in unit:
+            delta = timedelta(hours=value)
+        elif "day" in unit:
+            delta = timedelta(days=value)
+        elif "week" in unit:
+            delta = timedelta(weeks=value)
+        else:
+            return None
+        
+        # Calculate reminder datetime (subtract delta from task datetime)
+        reminder_datetime = task_datetime - delta
+        
+        # Return formatted string
+        return reminder_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        
+    except Exception as e:
+        print(f"Error calculating reminder datetime: {e}")
+        return None
+
+
+def ai_enhance_task_data(title, description, category):
+    """
+    Use AI to enhance task data - improve description and validate/suggest category.
+    
+    Args:
+        title (str): Task title
+        description (str): Task description
+        category (str): Task category
+    
+    Returns:
+        dict: Enhancement results with enhanced_description and enhanced_category
+    """
+    try:
+        enhancement_prompt = f"""
+        Enhance this task data to make it more useful and organized:
+        
+        Title: "{title}"
+        Description: "{description}"
+        Category: "{category}"
+        
+        Please:
+        1. Improve the description to be more detailed and actionable (keep it concise but informative)
+        2. Validate/improve the category (common categories: work, personal, health, fitness, education, shopping, social, travel, maintenance, finance)
+        
+        Return ONLY a JSON object with this exact format:
+        {{
+            "enhanced_description": "improved description here",
+            "enhanced_category": "validated category here"
+        }}
+        """
+        
+        enhanced_data = None
+        
+        # Try Groq first (fastest and reliable)
+        if groq_client:
+            try:
+                chat_completion = groq_client.chat.completions.create(
+                    messages=[{"role": "user", "content": enhancement_prompt}],
+                    model="llama-3.1-8b-instant",
+                    temperature=0.3,
+                    max_tokens=300
+                )
+                response_text = chat_completion.choices[0].message.content.strip()
+                enhanced_data = json.loads(response_text)
+                print("✓ Used Groq API for task enhancement")
+            except Exception as e:
+                print(f"Groq enhancement failed: {e}")
+        
+        # Fallback to Gemini
+        if not enhanced_data and api_key and genai:
+            try:
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = model.generate_content(enhancement_prompt)
+                response_text = response.text.strip()
+                
+                # Clean up response (remove markdown formatting if present)
+                if response_text.startswith('```json'):
+                    response_text = response_text.replace('```json', '').replace('```', '').strip()
+                
+                enhanced_data = json.loads(response_text)
+                print("✓ Used Gemini API for task enhancement")
+            except Exception as e:
+                print(f"Gemini enhancement failed: {e}")
+        
+        # Fallback to Cohere
+        if not enhanced_data and co:
+            try:
+                response = co.chat(
+                    message=enhancement_prompt,
+                    max_tokens=300,
+                    temperature=0.3
+                )
+                response_text = response.text.strip()
+                enhanced_data = json.loads(response_text)
+                print("✓ Used Cohere API for task enhancement")
+            except Exception as e:
+                print(f"Cohere enhancement failed: {e}")
+        
+        if enhanced_data and 'enhanced_description' in enhanced_data and 'enhanced_category' in enhanced_data:
+            return {
+                "success": True,
+                "enhanced_description": enhanced_data['enhanced_description'],
+                "enhanced_category": enhanced_data['enhanced_category']
+            }
+        else:
+            return {"success": False, "message": "AI enhancement failed"}
+            
+    except Exception as e:
+        print(f"AI enhancement error: {e}")
+        return {"success": False, "message": f"AI enhancement error: {str(e)}"}

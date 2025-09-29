@@ -45,7 +45,7 @@ def generate_schedule(user_id):
         # Temporarily return detailed error for debugging
         return jsonify({'message': 'Failed to generate tasks from AI.', 'error': str(e), 'error_type': type(e).__name__}), 500
 
-@ai_bp.route('/api/<string:user_id>/ai/add-task', methods=['POST'])
+@ai_bp.route('/api/<string:user_id>/ai/add-task-simple', methods=['POST'])
 def add_ai_task_to_schedule(user_id):
 
     data = request.json

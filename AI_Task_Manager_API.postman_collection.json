@@ -1,0 +1,246 @@
+{
+	"info": {
+		"_postman_id": "ai-task-manager-api",
+		"name": "AI Task Manager API",
+		"description": "API collection for testing AI-powered task management endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "AI Add Task",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"title\": \"Gym Session\",\n    \"description\": \"Scheduled gym session at the gym\",\n    \"category\": \"fitness\",\n    \"date\": \"2025-09-30\",\n    \"time\": \"07:00\",\n    \"done\": false,\n    \"reminder_setting\": \"15 minutes\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/{{user_id}}/ai/add-task",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"{{user_id}}",
+						"ai",
+						"add-task"
+					]
+				},
+				"description": "AI-powered task creation endpoint that enhances task data and calculates reminders in IST"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Gym Session\",\n    \"description\": \"Scheduled gym session at the gym\",\n    \"category\": \"fitness\",\n    \"date\": \"2025-09-30\",\n    \"time\": \"07:00\",\n    \"done\": false,\n    \"reminder_setting\": \"15 minutes\"\n}"
+						},
+						"url": {
+							"raw": "http://127.0.0.1:5000/api/8620b861-ea55-478a-b1b4-f266cb6a999d/ai/add-task",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "5000",
+							"path": [
+								"api",
+								"8620b861-ea55-478a-b1b4-f266cb6a999d",
+								"ai",
+								"add-task"
+							]
+						}
+					},
+					"status": "Created",
+					"code": 201,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"success\": true,\n    \"message\": \"AI task added successfully!\",\n    \"task_id\": 123,\n    \"task_data\": {\n        \"user_id\": \"8620b861-ea55-478a-b1b4-f266cb6a999d\",\n        \"title\": \"Gym Session\",\n        \"description\": \"Complete 45-minute gym workout focusing on cardio and strength training at the local gym facility\",\n        \"category\": \"fitness\",\n        \"date\": \"2025-09-30\",\n        \"time\": \"07:00\",\n        \"done\": false,\n        \"reminder_setting\": \"15 minutes\",\n        \"reminder_datetime\": \"2025-09-30 06:45:00\"\n    },\n    \"ai_enhanced\": true\n}"
+				}
+			]
+		},
+		{
+			"name": "Test Server Status",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						""
+					]
+				},
+				"description": "Simple GET request to check if Flask server is running"
+			},
+			"response": []
+		},
+		{
+			"name": "AI Add Task - Doctor Appointment",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"title\": \"Doctor Appointment\",\n    \"description\": \"Annual checkup with Dr. Smith\",\n    \"category\": \"health\",\n    \"date\": \"2025-10-01\",\n    \"time\": \"14:30\",\n    \"reminder_setting\": \"1 hour\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/{{user_id}}/ai/add-task",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"{{user_id}}",
+						"ai",
+						"add-task"
+					]
+				},
+				"description": "Example health category task"
+			},
+			"response": []
+		},
+		{
+			"name": "AI Add Task - Work Meeting",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"title\": \"Team Meeting\",\n    \"description\": \"Weekly team standup meeting\",\n    \"category\": \"work\",\n    \"date\": \"2025-10-02\",\n    \"time\": \"09:00\",\n    \"reminder_setting\": \"30 minutes\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/{{user_id}}/ai/add-task",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"{{user_id}}",
+						"ai",
+						"add-task"
+					]
+				},
+				"description": "Example work category task"
+			},
+			"response": []
+		},
+		{
+			"name": "AI Add Task - Invalid Date Format (Error Test)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"title\": \"Test Task\",\n    \"description\": \"Test Description\",\n    \"category\": \"test\",\n    \"date\": \"30-09-2025\",\n    \"time\": \"07:00\",\n    \"reminder_setting\": \"15 minutes\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/{{user_id}}/ai/add-task",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"{{user_id}}",
+						"ai",
+						"add-task"
+					]
+				},
+				"description": "Test case with invalid date format - should return 400 error"
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://127.0.0.1:5000",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "8620b861-ea55-478a-b1b4-f266cb6a999d",
+			"type": "string"
+		}
+	]
+}
