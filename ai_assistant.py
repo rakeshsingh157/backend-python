@@ -506,7 +506,6 @@ def handle_event_deletion(user_message, user_id):
             
             # Fallback: try to extract event IDs using regex
             try:
-                import re
                 id_matches = re.findall(r'"id":\s*(\d+)', deletion_analysis)
                 if id_matches:
                     deleted_count = 0
@@ -517,7 +516,8 @@ def handle_event_deletion(user_message, user_id):
                             if delete_event_from_db(user_id, int(event_id)):
                                 deleted_count += 1
                                 deleted_titles.append(f"Task ID {event_id}")
-                        except:
+                        except Exception as delete_error:
+                            print(f"Failed to delete event ID {event_id}: {delete_error}")
                             continue
                     
                     if deleted_count > 0:
